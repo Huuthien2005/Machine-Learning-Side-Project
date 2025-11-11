@@ -18,7 +18,7 @@ from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
 from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
 
-
+import os
 
 
 
@@ -44,11 +44,22 @@ y=y['G3']
 print(X.head(10))
 print(y.head(10))
 
-#Create a student performance profiling report using ydata_profiling
+
 #Combine features and target into 1 dataframe to visualization
 student_information = pd.concat([X,y],axis=1)
-profile= ProfileReport(student_information,title="Student Performance Profiling Report",minimal=True)
-profile.to_file("student_performance_report.html")
+
+#Create a student performance profiling report using ydata_profiling
+report_path= "docs/student_performance_report.html"
+dataset_update_path="docs/basic_summary.csv"
+if not os.path.exists(report_path) and os.path.exists(dataset_update_path):
+    profile = ProfileReport(student_information, title="Student Performance Profiling Report", minimal=True)
+    profile.to_file(report_path)
+    student_information.decribe(include="all").to_csv(dataset_update_path)
+    print("Report is created.")
+else:
+    print("Report already exists - skipped!")
+
+student_information.describe(include="all").to_csv(dataset_update_path)
 
 #Visualizing dataset by using pygwalker - its outlook is similar like Tableau
 walker=pyg.walk(student_information)
@@ -91,7 +102,16 @@ def binary_transform(X):
     x_mapped = np.vectorize(mapping.get)(X)
     return x_mapped
 
-yesno_transformer= FunctionTransformer(binary_transform,validate=False)
+
+    # out=X.copy()
+    # for c in X.columns:
+    #     out[c] = X[c].astype(str).str.lower().map(mapping).astype('Int64').fillna(0).astype(int)
+    # return out
+
+    # out = X.apply(lambda col: col.astype(str).str.lower().map(mapping).fillna(0).astype(int))
+    # return out
+
+yesno_transformer= FunctionTransformer(binary_transform,validate=False, feature_names_out="one-to-one")
 
 #using pipeline to combine steps of preprocessing data
 #Pipeline for numeric features
@@ -107,7 +127,7 @@ binary_transformer=Pipeline(steps=[
 #Pipeline for nominal features
 nominal_transformer=Pipeline(steps=[
     ('imputer',SimpleImputer(missing_values=np.nan,strategy='most_frequent')),
-    ('nominal',OneHotEncoder())
+    ('nominal',OneHotEncoder(handle_unknown="ignore",sparse_output=False))
 ])
 
 
@@ -158,12 +178,19 @@ parameter_grid = [
     }
 ]
 
+scoring={
+    "r2":"r2",
+    "neg_mae": "neg_mean_absolute_error",
+    "neg_rmse":"neg_root_mean_squared_error"
+}
+
 #Using hyperparameter tuning
 grid_search=GridSearchCV(
     estimator=model,
      param_grid=parameter_grid,
     cv=5,
-    scoring='r2',
+    scoring="r2",
+    # refit="best_index_",
     n_jobs=-1
 )
 #Fit model with cross validation method
